@@ -311,21 +311,23 @@ webApp:
       cpu: 100m
       memory: 128Mi
   # Session cookie configuration for auth fast path
-  # Timing values (cookieMaxAge, maxLifetime, nearExpiryThreshold) are
-  # automatically derived from oauth2Proxy.cookieExpire
+  # maxLifetime (absolute cap) and nearExpiryThreshold stay derived from
+  # oauth2Proxy.cookieExpire; cookieMaxAge is set explicitly below.
   session:
     cookieName: "workspace_console_session"
     cookiePath: "/api/"
     secretName: "web-app-session-secret"
-    # Number of session-signing keys retained by web-app-session-rotator. Key
-    # retention (numberOfKeys * rotator.rotationInterval) MUST be >= the session
-    # cookie Max-Age (75% of oauth2Proxy.cookieExpire, i.e. 6h at the 8h default).
-    # Otherwise a still-sent-but-idle cookie can outlive its signing key: the
-    # web-app can't validate it and the fast-path route bypasses OAuth2 Proxy, so
-    # the request dead-ends tokenless ("unknown user" until re-login) — see #86.
-    # At the 15m default rotation, 6h needs >= 24 keys; 25 leaves headroom.
-    # Enforced by validations.tpl.
-    numberOfKeys: 25
+    # Idle timeout for the fast-path cookie. SLIDING: the cookie is re-signed with
+    # the newest key and its Max-Age re-Set on every authenticated request, so only
+    # inactivity counts. Keep short and below the signing-key retention (see
+    # numberOfKeys) so the browser stops sending the cookie before its key rotates
+    # out. An idle-beyond-timeout return then falls to the OAuth2 Proxy auth-path
+    # and re-auths transparently. Must be < the session max lifetime.
+    cookieMaxAge: "1h"
+    # Session-signing keys retained by web-app-session-rotator. Retention
+    # (numberOfKeys * rotationInterval) MUST be >= cookieMaxAge + rotationInterval
+    # since cookies always carry the newest key.
+    numberOfKeys: 6
     newKeyUseDelaySecs: 5
   # Kubectl access page — lets users download a kubeconfig setup script.
   # clusterName gates the feature: set it to enable, leave empty to disable.

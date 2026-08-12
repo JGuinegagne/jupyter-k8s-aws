@@ -65,12 +65,12 @@ Supports hours (h) and minutes (m).
 {{- end -}}
 
 {{/*
-Compute session cookie max age in seconds.
-75% of OAuth2 Proxy cookie expiry to ensure session expires before the OAuth2 session.
+Compute session cookie Max-Age (idle timeout) in seconds from webApp.session.cookieMaxAge.
+Sliding: re-Set on every authenticated request. Kept below the session-key retention so the
+browser stops sending the cookie before its signing key is pruned (see #86 / validations.tpl).
 */}}
 {{- define "defaulter.sessionCookieMaxAgeSecs" -}}
-{{- $expirySecs := include "defaulter.durationToSeconds" .Values.oauth2Proxy.cookieExpire | int -}}
-{{- div (mul $expirySecs 3) 4 -}}
+{{- include "defaulter.durationToSeconds" .Values.webApp.session.cookieMaxAge -}}
 {{- end -}}
 
 {{/*

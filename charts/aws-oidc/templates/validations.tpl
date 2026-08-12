@@ -104,18 +104,27 @@
 {{- fail (printf "dex.keyCheck.timeout_seconds (%d) must be >= period_seconds (%d) so the startupProbe failureThreshold is at least 1" (.Values.dex.keyCheck.timeout_seconds | int) (.Values.dex.keyCheck.period_seconds | int)) }}
 {{- end }}
 
-{{/* Validate: web-app session-signing key retention must cover the session cookie's Max-Age (#86).
-     The fast-path cookie (workspace_console_session) is presented by the browser until its Max-Age.
-     If its signing key has already been pruned from web-app-session-secret, the web-app can't validate
-     it — and because the fast-path IngressRoute bypasses OAuth2 Proxy, the request dead-ends tokenless
-     ("unknown user" until re-login). Retention = webApp.session.numberOfKeys * rotator.rotationInterval;
-     the cookie Max-Age is derived from oauth2Proxy.cookieExpire. */}}
+{{/* Validate: web-app session-signing key retention must cover the cookie's idle Max-Age (#86).
+     The fast-path cookie (workspace_console_session) is re-signed with the NEWEST key on every
+     request and sent by the browser until its (sliding) Max-Age. If its key is pruned first, the
+     web-app can't decode it and — because the fast-path IngressRoute bypasses OAuth2 Proxy — the
+     request dead-ends tokenless. Mirroring the authmiddleware retention guard, retention must
+     exceed cookieMaxAge by at least one rotationInterval (cookies always carry the newest key).
+     Retention = webApp.session.numberOfKeys * rotator.rotationInterval. */}}
 {{- if and .Values.webApp.enabled .Values.rotator.enabled }}
-{{- $sessionMaxAgeSecs := include "defaulter.sessionCookieMaxAgeSecs" . | int }}
+{{- $cookieMaxAgeSecs := include "defaulter.sessionCookieMaxAgeSecs" . | int }}
+{{- $maxLifetimeSecs := include "defaulter.sessionMaxLifetimeSecs" . | int }}
+{{- if lt $cookieMaxAgeSecs 1 }}
+{{- fail (printf "webApp.session.cookieMaxAge must be a positive duration (e.g. \"1h\"), got %q" .Values.webApp.session.cookieMaxAge) }}
+{{- end }}
+{{- if ge $cookieMaxAgeSecs $maxLifetimeSecs }}
+{{- fail (printf "webApp.session.cookieMaxAge (%s) must be less than the session max lifetime (%ds, = oauth2Proxy.cookieExpire %s)" .Values.webApp.session.cookieMaxAge $maxLifetimeSecs .Values.oauth2Proxy.cookieExpire) }}
+{{- end }}
 {{- $rotationSecs := include "defaulter.durationToSeconds" .Values.rotator.rotationInterval | int }}
 {{- $retentionSecs := mul (.Values.webApp.session.numberOfKeys | int) $rotationSecs }}
-{{- if lt $retentionSecs $sessionMaxAgeSecs }}
-{{- fail (printf "web-app session key retention (%ds = numberOfKeys %d * rotationInterval %s) must be >= session cookie Max-Age (%ds, 75%% of oauth2Proxy.cookieExpire %s). Increase webApp.session.numberOfKeys or rotator.rotationInterval." $retentionSecs (.Values.webApp.session.numberOfKeys | int) .Values.rotator.rotationInterval $sessionMaxAgeSecs .Values.oauth2Proxy.cookieExpire) }}
+{{- $requiredSecs := add $cookieMaxAgeSecs $rotationSecs }}
+{{- if lt $retentionSecs $requiredSecs }}
+{{- fail (printf "web-app session key retention (%ds = numberOfKeys %d * rotationInterval %s) must be >= cookieMaxAge (%s) + one rotationInterval (%ds). Increase webApp.session.numberOfKeys or rotator.rotationInterval, or lower webApp.session.cookieMaxAge." $retentionSecs (.Values.webApp.session.numberOfKeys | int) .Values.rotator.rotationInterval .Values.webApp.session.cookieMaxAge $requiredSecs) }}
 {{- end }}
 {{- end }}
 

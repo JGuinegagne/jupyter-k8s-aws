@@ -206,12 +206,13 @@ var _ = Describe("Web App", func() {
 			Expect(yaml.Unmarshal(data, &dep)).To(Succeed())
 		})
 
-		It("should set SESSION_COOKIE_MAX_AGE_SECS to 75% of cookieExpire", func() {
+		It("should set SESSION_COOKIE_MAX_AGE_SECS from webApp.session.cookieMaxAge (default 1h)", func() {
 			env := dep.Spec.Template.Spec.Containers[0].Env
 			val, found := getEnvVar(env, "SESSION_COOKIE_MAX_AGE_SECS")
 			Expect(found).To(BeTrue(), "SESSION_COOKIE_MAX_AGE_SECS not found")
-			// 8h = 28800s, 75% = 21600
-			Expect(val).To(Equal("21600"))
+			// Explicit idle timeout, no longer 75% of cookieExpire: "1h" = 3600s (#86).
+			// Kept below the session-key retention so idle cookies fall to the auth path.
+			Expect(val).To(Equal("3600"))
 		})
 
 		It("should set SESSION_MAX_LIFETIME_SECS to 100% of cookieExpire", func() {
@@ -228,6 +229,61 @@ var _ = Describe("Web App", func() {
 			Expect(found).To(BeTrue(), "SESSION_NEAR_EXPIRY_THRESHOLD_SECS not found")
 			// 8h = 28800s, 25% = 7200
 			Expect(val).To(Equal("7200"))
+		})
+	})
+
+	// Guards the #86 invariant: the fast-path session cookie's idle Max-Age must
+	// stay within its signing-key retention (numberOfKeys * rotator.rotationInterval),
+	// or an idle cookie outlives its key and dead-ends tokenless. Mirrors the
+	// authmiddleware retention guard.
+	Context("validation: session key retention vs cookie Max-Age (#86)", func() {
+		// renderOIDC runs `helm template` with webApp enabled plus the given
+		// overrides, returning combined output and the exec error (nil = rendered).
+		renderOIDC := func(extraArgs ...string) (string, error) {
+			chartDir := GinkgoT().TempDir()
+			copyDir(filepath.Join(rootDir, "charts/aws-oidc"), chartDir)
+			out, err := exec.Command("helm", "dependency", "build", chartDir).CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), "helm dependency build failed: %s", string(out))
+			args := append([]string{helmTemplateCmd, helmReleaseName, chartDir}, oidcRequiredArgs()...)
+			args = append(args, helmSetFlag, "webApp.enabled=true")
+			args = append(args, extraArgs...)
+			out, err = exec.Command("helm", args...).CombinedOutput()
+			return string(out), err
+		}
+
+		It("renders with the defaults (6 keys x 15m >= 1h + 15m)", func() {
+			_, err := renderOIDC()
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("fails when retention < cookieMaxAge + one rotationInterval", func() {
+			// 3 keys x 15m = 45m < 1h + 15m = 75m.
+			out, err := renderOIDC(helmSetFlag, "webApp.session.numberOfKeys=3")
+			Expect(err).To(HaveOccurred(), "expected the retention guard to fail")
+			Expect(strings.ToLower(out)).To(ContainSubstring("retention"))
+			Expect(strings.ToLower(out)).To(ContainSubstring("cookiemaxage"))
+		})
+
+		It("fails when cookieMaxAge >= the session max lifetime", func() {
+			// maxLifetime = oauth2Proxy.cookieExpire = 8h; 10h exceeds it.
+			out, err := renderOIDC(helmSetFlag, "webApp.session.cookieMaxAge=10h")
+			Expect(err).To(HaveOccurred(), "expected the max-lifetime guard to fail")
+			Expect(strings.ToLower(out)).To(ContainSubstring("max lifetime"))
+		})
+
+		It("fails when cookieMaxAge is not a positive duration", func() {
+			out, err := renderOIDC(helmSetFlag, "webApp.session.cookieMaxAge=0m")
+			Expect(err).To(HaveOccurred(), "expected the positive-duration guard to fail")
+			Expect(strings.ToLower(out)).To(ContainSubstring("positive duration"))
+		})
+
+		It("passes when cookieMaxAge is raised with matching retention", func() {
+			// 2h idle needs retention >= 2h + 15m = 135m -> 9 keys x 15m = 135m.
+			_, err := renderOIDC(
+				helmSetFlag, "webApp.session.cookieMaxAge=2h",
+				helmSetFlag, "webApp.session.numberOfKeys=9",
+			)
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 
