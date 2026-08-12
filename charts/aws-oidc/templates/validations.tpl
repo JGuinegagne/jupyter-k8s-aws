@@ -93,6 +93,32 @@
 {{- fail (printf "authmiddleware.jwtRefreshHorizon (%s) must be greater than or equal to jwtExpiration (%s)" .Values.authmiddleware.jwtRefreshHorizon .Values.authmiddleware.jwtExpiration) }}
 {{- end }}
 
+{{/* Validate: dex startupProbe keyCheck budget yields a valid failureThreshold (see #82).
+     deployment.yaml computes failureThreshold = timeout_seconds / period_seconds (integer
+     div). A period of 0 divides by zero, and period > timeout truncates to 0 — either way
+     Kubernetes rejects a startupProbe with failureThreshold: 0, so guard both here. */}}
+{{- if lt (.Values.dex.keyCheck.period_seconds | int) 1 }}
+{{- fail (printf "dex.keyCheck.period_seconds must be at least 1, got %d" (.Values.dex.keyCheck.period_seconds | int)) }}
+{{- end }}
+{{- if lt (.Values.dex.keyCheck.timeout_seconds | int) (.Values.dex.keyCheck.period_seconds | int) }}
+{{- fail (printf "dex.keyCheck.timeout_seconds (%d) must be >= period_seconds (%d) so the startupProbe failureThreshold is at least 1" (.Values.dex.keyCheck.timeout_seconds | int) (.Values.dex.keyCheck.period_seconds | int)) }}
+{{- end }}
+
+{{/* Validate: web-app session-signing key retention must cover the session cookie's Max-Age (#86).
+     The fast-path cookie (workspace_console_session) is presented by the browser until its Max-Age.
+     If its signing key has already been pruned from web-app-session-secret, the web-app can't validate
+     it — and because the fast-path IngressRoute bypasses OAuth2 Proxy, the request dead-ends tokenless
+     ("unknown user" until re-login). Retention = webApp.session.numberOfKeys * rotator.rotationInterval;
+     the cookie Max-Age is derived from oauth2Proxy.cookieExpire. */}}
+{{- if and .Values.webApp.enabled .Values.rotator.enabled }}
+{{- $sessionMaxAgeSecs := include "defaulter.sessionCookieMaxAgeSecs" . | int }}
+{{- $rotationSecs := include "defaulter.durationToSeconds" .Values.rotator.rotationInterval | int }}
+{{- $retentionSecs := mul (.Values.webApp.session.numberOfKeys | int) $rotationSecs }}
+{{- if lt $retentionSecs $sessionMaxAgeSecs }}
+{{- fail (printf "web-app session key retention (%ds = numberOfKeys %d * rotationInterval %s) must be >= session cookie Max-Age (%ds, 75%% of oauth2Proxy.cookieExpire %s). Increase webApp.session.numberOfKeys or rotator.rotationInterval." $retentionSecs (.Values.webApp.session.numberOfKeys | int) .Values.rotator.rotationInterval $sessionMaxAgeSecs .Values.oauth2Proxy.cookieExpire) }}
+{{- end }}
+{{- end }}
+
 {{/* Validate rotator configuration if enabled */}}
 {{- if .Values.rotator.enabled }}
 {{- if not .Values.rotator.rotationInterval }}

@@ -90,6 +90,24 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /etc/dex/config
+        # Gate readiness on a real signing key, not just the HTTP server binding.
+        # /dex/healthz returns 200 as soon as the server binds — before the first
+        # key rotation — so a pod can go Ready while /dex/keys serves an empty JWKS.
+        # The EKS OIDC authenticator would then fetch and cache that empty key set
+        # and 401 every id_token until its webhook cache TTL expires (see #82).
+        # Staying NotReady until a "kid" appears keeps the pod out of the Service
+        # endpoints so the authenticator retries instead of caching a keyless set.
+        startupProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - 'wget -q -O - http://127.0.0.1:5556/dex/keys | grep -q "\"kid\""'
+          periodSeconds: {{ .Values.dex.keyCheck.period_seconds }}
+          # failureThreshold = timeout / period. keyCheck bounds are validated in
+          # validations.tpl; max 1 only keeps this from dividing by zero so that
+          # guard produces the error rather than a raw template panic.
+          failureThreshold: {{ div (.Values.dex.keyCheck.timeout_seconds | int) (max 1 (.Values.dex.keyCheck.period_seconds | int)) }}
         readinessProbe:
           httpGet:
             path: /dex/healthz
