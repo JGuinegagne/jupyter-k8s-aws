@@ -157,14 +157,13 @@ spec:
             periodSeconds: 2
       {{- end }}
 
-      {{- if or .Values.remoteAccess.enabled .Values.directSSH.enabled }}
       volumes:
         - name: "workspace-base"
           emptyDir:
             sizeLimit: "1Gi"
 
       initContainers:
-        {{- if .Values.remoteAccess.enabled }}
+        {{- if not .Values.directSSH.enabled }}
         - name: workspace-init-container
           image: "{{ .Values.remoteAccess.ssmSidecarImage.containerRegistry }}/{{ .Values.remoteAccess.ssmSidecarImage.repository }}:{{ .Values.remoteAccess.ssmSidecarImage.tag }}"
           command:
@@ -172,8 +171,7 @@ spec:
           volumeMounts:
             - name: workspace-base
               mountPath: /workspace_base_dir
-        {{- end }}
-        {{- if .Values.directSSH.enabled }}
+        {{- else }}
         - name: direct-ssh-init
           image: "{{ .Values.directSSH.initImage.containerRegistry }}/{{ .Values.directSSH.initImage.repository }}:{{ .Values.directSSH.initImage.tag }}"
           command:
@@ -182,14 +180,11 @@ spec:
             - name: workspace-base
               mountPath: /workspace_base_dir
         {{- end }}
-      {{- end }}
 
       primaryContainerModifications:
-        {{- if or .Values.remoteAccess.enabled .Values.directSSH.enabled }}
         volumeMounts:
           - name: "workspace-base"
             mountPath: "/opt/amazon/sagemaker/workspace"
-        {{- end }}
         mergeEnv:
           - name: WORKSPACE_NAMESPACE
             valueTemplate: "{{`{{ .Workspace.Namespace }}`}}"
