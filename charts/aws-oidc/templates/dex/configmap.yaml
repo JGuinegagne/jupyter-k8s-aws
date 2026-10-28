@@ -20,6 +20,9 @@ data:
       https: 0.0.0.0:5554
       tlsCert: /etc/dex/tls/tls.crt
       tlsKey: /etc/dex/tls/tls.key
+      # TLS 1.3 only, like every internal hop (see traefik/tls-option.yaml). Dex ignores
+      # unknown keys, so a typo here would silently fall back to TLS 1.2.
+      tlsMinVersion: "1.3"
 {{- else }}
       http: 0.0.0.0:5556
 {{- end }}
