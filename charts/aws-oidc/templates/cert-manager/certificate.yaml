@@ -44,9 +44,9 @@ components two different ways, and they need different names:
 A certificate with only the FQDN would pass /oauth2/auth and fail every login redirect.
 */}}
 {{- $ns := .Values.namespace }}
-{{- range $component := list "dex" "oauth2-proxy" }}
-{{- $enabled := ternary $.Values.internalTls.dex $.Values.internalTls.oauth2Proxy (eq $component "dex") }}
-{{- if $enabled }}
+{{- $toggles := dict "dex" $.Values.internalTls.dex "oauth2-proxy" $.Values.internalTls.oauth2Proxy "web-app" $.Values.internalTls.webApp "authmiddleware" $.Values.internalTls.authmiddleware }}
+{{- range $component := list "dex" "oauth2-proxy" "web-app" "authmiddleware" }}
+{{- if get $toggles $component }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate

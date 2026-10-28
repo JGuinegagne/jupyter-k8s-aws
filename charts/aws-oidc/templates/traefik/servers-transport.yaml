@@ -13,9 +13,9 @@ issues from a CA issuer, so each component's own secret doubles as the trust sou
 there is no separate CA bundle to distribute.
 */}}
 {{- $ns := .Values.namespace }}
-{{- range $component := list "dex" "oauth2-proxy" }}
-{{- $enabled := ternary $.Values.internalTls.dex $.Values.internalTls.oauth2Proxy (eq $component "dex") }}
-{{- if $enabled }}
+{{- $toggles := dict "dex" $.Values.internalTls.dex "oauth2-proxy" $.Values.internalTls.oauth2Proxy "web-app" $.Values.internalTls.webApp }}
+{{- range $component := list "dex" "oauth2-proxy" "web-app" }}
+{{- if get $toggles $component }}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: ServersTransport
