@@ -11,8 +11,8 @@ spec:
   selector:
     app: web-app
   ports:
-    - name: http
-      port: 8090
-      targetPort: http
+    - name: {{ include "defaulter.webAppPortName" . }}
+      port: {{ include "defaulter.webAppPort" . }}
+      targetPort: {{ include "defaulter.webAppPortName" . }}
       protocol: TCP
 {{- end }}
