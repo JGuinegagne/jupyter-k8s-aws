@@ -37,14 +37,15 @@ var _ = Describe("Network Policy Consistency", func() {
 
 	const webAppComponent = "web-app"
 
-	// The full set of behind-traefik components. Adding a fifth component that
+	// The full set of behind-traefik components, on their TLS ports (internalTls is
+	// on by default). Adding a fifth component that
 	// sits behind traefik should mean adding a row here — that is intentional
 	// friction so the shared invariants are a conscious decision.
 	components := []behindTraefikPolicy{
-		{"dex", "dex/network-policy.yaml", "dex", "oauth", 5556},
-		{componentAuthmiddleware, componentAuthmiddleware + "/network-policy.yaml", componentAuthmiddleware, "auth", 8080},
-		{"oauth2-proxy", "oauth2-proxy/network-policy.yaml", "oauth2-proxy", "auth", 4180},
-		{webAppComponent, webAppComponent + "/network-policy.yaml", webAppComponent, webAppComponent, 8090},
+		{"dex", "dex/network-policy.yaml", "dex", "oauth", 5554},
+		{componentAuthmiddleware, componentAuthmiddleware + "/network-policy.yaml", componentAuthmiddleware, "auth", 8443},
+		{"oauth2-proxy", "oauth2-proxy/network-policy.yaml", "oauth2-proxy", "auth", 4443},
+		{webAppComponent, webAppComponent + "/network-policy.yaml", webAppComponent, webAppComponent, 8443},
 	}
 
 	var policies map[string]networkingv1.NetworkPolicy

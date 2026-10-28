@@ -97,10 +97,10 @@ var _ = Describe("Dex", func() {
 		})
 
 		// Regression guard for #49: both oauth2-proxy and authmiddleware run a
-		// wait-for-dex initContainer that probes http://dex:5556/dex/healthz
-		// directly in-cluster. Under NetworkPolicy enforcement, dex must allow
+		// wait-for-dex initContainer that connects to dex:5554
+		// directly in-cluster (internalTls is on by default). Under NetworkPolicy enforcement, dex must allow
 		// that in-cluster ingress or the init gate hangs on every clean deploy.
-		It("should allow in-cluster ingress on :5556 from oauth2-proxy and authmiddleware", func() {
+		It("should allow in-cluster ingress on :5554 from oauth2-proxy and authmiddleware", func() {
 			var gate *networkingv1.NetworkPolicyIngressRule
 			for i := range np.Spec.Ingress {
 				rule := &np.Spec.Ingress[i]
@@ -131,11 +131,11 @@ var _ = Describe("Dex", func() {
 
 			gatePort := false
 			for _, p := range gate.Ports {
-				if p.Port != nil && p.Port.IntValue() == 5556 {
+				if p.Port != nil && p.Port.IntValue() == 5554 {
 					gatePort = true
 				}
 			}
-			Expect(gatePort).To(BeTrue(), "the dex gate ingress rule should target :5556")
+			Expect(gatePort).To(BeTrue(), "the dex gate ingress rule should target :5554")
 		})
 
 		It("should allow :443 egress for the Kubernetes API server", func() {

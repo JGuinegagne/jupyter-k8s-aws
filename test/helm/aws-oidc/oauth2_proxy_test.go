@@ -27,12 +27,12 @@ var _ = Describe("OAuth2 Proxy", func() {
 			Expect(egressPorts(np)).To(HaveKey(443), "oauth2-proxy needs :443 egress to reach Dex via the public domain")
 		})
 
-		// oauth2-proxy's wait-for-dex initContainer probes
-		// http://dex.<ns>:5556/dex/healthz. That port is plaintext, so it must
-		// be scoped to the dex pods in this namespace rather than open egress.
-		It("should scope :5556 egress to dex pods in this namespace", func() {
-			Expect(egressScopedToPodOnPort(np, 5556, "dex")).To(BeTrue(),
-				":5556 egress should target dex pods, namespace-scoped")
+		// oauth2-proxy's wait-for-dex initContainer connects to
+		// dex.<ns>:5554 (internalTls is on by default). That
+		// egress must be scoped to the dex pods in this namespace, not left open.
+		It("should scope :5554 egress to dex pods in this namespace", func() {
+			Expect(egressScopedToPodOnPort(np, 5554, "dex")).To(BeTrue(),
+				":5554 egress should target dex pods, namespace-scoped")
 		})
 
 		// :80 plaintext egress was unused boilerplate (issuer/redirect are https,

@@ -41,13 +41,18 @@ tls:
     #
     # Unlike ELBSecurityPolicy-TLS13-1-2-2021-06 it carries no CBC ciphers, so a client that
     # supports neither AES-GCM nor ChaCha20-Poly1305 can no longer connect; current browsers
-    # support both. Override only for such a client, and note that a policy without `PQ` in
-    # its name offers no post-quantum key exchange.
+    # support both.
+    #
+    # Only policies limited to TLS 1.2/1.3 with AEAD suites are accepted (the chart refuses
+    # to render otherwise): this one, ELBSecurityPolicy-TLS13-1-3-PQ-2025-09 (TLS 1.3
+    # only), and their FIPS variants ELBSecurityPolicy-TLS13-1-2-Res-FIPS-PQ-2025-09 and
+    # ELBSecurityPolicy-TLS13-1-3-FIPS-PQ-2025-09. Every hop behind the NLB is TLS 1.3 only
+    # (see traefik/tls-option.yaml).
     sslPolicy: ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09
   # Private CA that cert-manager mints in this namespace, used for the Traefik
   # certificate and for every internalTls certificate below. Leaf
-  # lifetimes are deliberately long: some upstreams cannot reload a rotated
-  # certificate without a pod restart (see internalTls notes).
+  # lifetimes are deliberately long: oauth2-proxy cannot reload a rotated
+  # certificate without a pod restart (authmiddleware and the web app can).
   internalCa:
     caDuration: 87600h # 10y — the CA itself
     caRenewBefore: 8760h
@@ -55,19 +60,14 @@ tls:
     renewBefore: 720h
 
 # [INTERNAL TLS]: encrypt the hops from Traefik to this chart's own components with
-# the tls.internalCa private CA.
-#
-# Off by default. dex and oauth2-proxy can serve HTTPS today; authmiddleware and the
-# web app cannot yet, and the chart rejects enabling them until their images gain the
-# capability:
-#   authmiddleware -> https://github.com/jupyter-infra/jupyter-k8s/issues/479
-#   web app        -> https://github.com/jupyter-infra/jupyter-k8s-ui/issues/71
+# the tls.internalCa private CA. On by default; each component serves TLS 1.3 only and
+# moves to its TLS port (dex 5554, oauth2-proxy 4443, authmiddleware and web app 8443).
 internalTls:
-  enabled: false
+  enabled: true
   dex: true
   oauth2Proxy: true
-  authmiddleware: false
-  webApp: false
+  authmiddleware: true
+  webApp: true
 
 # [STORAGE] StorageClasses for Workspaces
 storageClass:
@@ -409,7 +409,7 @@ webApp:
   imagePullPolicy: Always
   repository: ghcr.io/jupyter-infra
   imageName: jupyter-k8s-ui
-  imageTag: v0.1.8
+  imageTag: v0.1.9
   # Default Kubernetes namespace where workspaces are created and managed. This
   # is always part of the workspace-switcher's namespace universe; add more via
   # workspaceNamespaceSelection.additionalNamespaces.
@@ -524,7 +524,7 @@ authmiddleware:
   imagePullPolicy: Always
   repository: ghcr.io/jupyter-infra
   imageName: jupyter-k8s-authmiddleware
-  imageTag: v0.4.0
+  imageTag: v0.4.1
   # Resource limits and requests
   resources:
     limits:
@@ -576,7 +576,7 @@ rotator:
   imagePullPolicy: Always
   repository: ghcr.io/jupyter-infra
   imageName: jupyter-k8s-rotator
-  imageTag: v0.4.0
+  imageTag: v0.4.1
   # Rotation interval (how often to rotate keys)
   # Must be parseable as a duration (e.g., "15m", "1h")
   rotationInterval: "15m"
