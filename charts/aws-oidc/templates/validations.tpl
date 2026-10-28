@@ -30,6 +30,13 @@
 {{- fail "tls.acm.sslPolicy must not be empty — it sets the NLB listener's TLS security policy" }}
 {{- end }}
 
+{{/* The NLB listener policy is the only TLS setting a consumer can change. Accept only the
+     AWS-managed policies limited to TLS 1.2/1.3 and AEAD suites: the other 2025 policies add CBC suites, and some TLS 1.0/1.1. */}}
+{{- $compliantSslPolicies := list "ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09" "ELBSecurityPolicy-TLS13-1-3-PQ-2025-09" "ELBSecurityPolicy-TLS13-1-2-Res-FIPS-PQ-2025-09" "ELBSecurityPolicy-TLS13-1-3-FIPS-PQ-2025-09" }}
+{{- if not (has .Values.tls.acm.sslPolicy $compliantSslPolicies) }}
+{{- fail (printf "tls.acm.sslPolicy %q is not supported — use one of %s" .Values.tls.acm.sslPolicy (join ", " $compliantSslPolicies)) }}
+{{- end }}
+
 {{/* Guard the removed Let's Encrypt keys explicitly. With --reset-then-reuse-values a stored
      value from an older release would otherwise be silently ignored, leaving the operator to
      think TLS is still configured the old way. */}}
@@ -38,15 +45,6 @@
 {{- end }}
 {{- if .Values.tls.mode }}
 {{- fail "tls.mode was removed — ACM is the only supported mode; drop the key and set tls.acm.certificateArn" }}
-{{- end }}
-
-{{/* Validate: reject the two components whose images cannot serve TLS yet. Failing here beats
-     rendering an https:// upstream that every request would then fail to reach. */}}
-{{- if and .Values.internalTls.enabled .Values.internalTls.authmiddleware }}
-{{- fail "internalTls.authmiddleware is not supported yet — the authmiddleware image cannot serve TLS (see jupyter-infra/jupyter-k8s#479)" }}
-{{- end }}
-{{- if and .Values.internalTls.enabled .Values.internalTls.webApp }}
-{{- fail "internalTls.webApp is not supported yet — the jupyter-k8s-ui image cannot serve TLS (see jupyter-infra/jupyter-k8s-ui#71)" }}
 {{- end }}
 
 {{/* Validate: the nodes the NLB targets must be able to run Traefik. targetNodeLabels selects

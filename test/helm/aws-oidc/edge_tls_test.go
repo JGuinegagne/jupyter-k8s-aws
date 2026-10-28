@@ -130,6 +130,15 @@ var _ = Describe("Edge TLS", func() {
 	// that lost `tls: {}` or moved to the `web` entrypoint would serve plaintext. This walks
 	// every rendered file rather than naming them, so it also constrains IngressRoutes added
 	// later — the point is the rule, not today's set of routes.
+	It("makes TLS 1.3 the floor for every router that terminates at Traefik", func() {
+		// On TLS 1.2 Traefik accepts CBC suites and signs with SHA-1 for a client offering
+		// only that; the default TLSOption is the one place that closes it for all routes.
+		opt := readFile(renderTLS(), "traefik/tls-option.yaml")
+		Expect(opt).To(ContainSubstring("kind: TLSOption"))
+		Expect(opt).To(ContainSubstring("name: default\n"))
+		Expect(opt).To(ContainSubstring("minVersion: VersionTLS13"))
+	})
+
 	It("keeps every IngressRoute on the websecure entrypoint with TLS", func() {
 		dir := renderTLS()
 		routes := 0
@@ -317,6 +326,26 @@ var _ = Describe("Edge TLS", func() {
 			out, err := exec.Command("helm", args...).CombinedOutput()
 			Expect(err).To(HaveOccurred(), "expected empty sslPolicy to be rejected, got:\n%s", string(out))
 			Expect(string(out)).To(ContainSubstring("tls.acm.sslPolicy must not be empty"))
+		})
+
+		It("accepts only listener policies limited to TLS 1.2/1.3 and AEAD suites", func() {
+			chartDir := GinkgoT().TempDir()
+			copyDir(filepath.Join(rootDir, "charts/aws-oidc"), chartDir)
+			render := func(policy string) ([]byte, error) {
+				args := append([]string{helmTemplateCmd, helmReleaseName, chartDir}, oidcRequiredArgs()...)
+				args = append(args, helmSetFlag, "tls.acm.sslPolicy="+policy)
+				return exec.Command("helm", args...).CombinedOutput()
+			}
+			for _, ok := range []string{"ELBSecurityPolicy-TLS13-1-3-PQ-2025-09", "ELBSecurityPolicy-TLS13-1-2-Res-FIPS-PQ-2025-09"} {
+				out, err := render(ok)
+				Expect(err).NotTo(HaveOccurred(), "expected %q to render:\n%s", ok, string(out))
+			}
+			// Same family and date, but with CBC suites (and TLS 1.0/1.1 for 1-0).
+			for _, bad := range []string{"ELBSecurityPolicy-TLS13-1-2-PQ-2025-09", "ELBSecurityPolicy-TLS13-1-0-PQ-2025-09"} {
+				out, err := render(bad)
+				Expect(err).To(HaveOccurred(), "expected %q to be rejected, got:\n%s", bad, string(out))
+				Expect(string(out)).To(ContainSubstring("is not supported"), bad)
+			}
 		})
 	})
 
