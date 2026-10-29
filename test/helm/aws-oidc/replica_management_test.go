@@ -19,6 +19,7 @@ const (
 	componentTraefik        = "traefik"
 	componentAuthmiddleware = "authmiddleware"
 	componentWebApp         = "web-app"
+	componentOAuth2Proxy    = "oauth2-proxy"
 )
 
 // kedaTimingValues mirrors the keda sub-block in values.yaml for parsing.

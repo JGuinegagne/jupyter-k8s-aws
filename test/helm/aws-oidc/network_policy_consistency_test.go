@@ -44,7 +44,7 @@ var _ = Describe("Network Policy Consistency", func() {
 	components := []behindTraefikPolicy{
 		{"dex", "dex/network-policy.yaml", "dex", "oauth", 5554},
 		{componentAuthmiddleware, componentAuthmiddleware + "/network-policy.yaml", componentAuthmiddleware, "auth", 8443},
-		{"oauth2-proxy", "oauth2-proxy/network-policy.yaml", "oauth2-proxy", "auth", 4443},
+		{componentOAuth2Proxy, componentOAuth2Proxy + "/network-policy.yaml", componentOAuth2Proxy, "auth", 4443},
 		{webAppComponent, webAppComponent + "/network-policy.yaml", webAppComponent, webAppComponent, 8443},
 	}
 
