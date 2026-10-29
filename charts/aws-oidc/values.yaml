@@ -127,7 +127,7 @@ traefik:
   # Traefik deployment image name
   imageName: traefik
   # Traefik deployment image tag
-  imageTag: v3.7.15
+  imageTag: v3.7.16
   # Number of traefik replicas (used when keda.enabled is false)
   replicas: 2
   # KEDA ScaledObject configuration — scales Traefik based on open connections.
@@ -204,7 +204,7 @@ dex:
   replicas: 1
   # Dex image settings
   repository: ghcr.io/dexidp/dex
-  imageTag: v2.45.1
+  imageTag: v2.46.1
   # initContainer config for traefik availability checks
   traefikCheck:
     # Maximum time to wait for traefik availability
