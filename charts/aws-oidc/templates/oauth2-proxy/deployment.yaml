@@ -42,7 +42,9 @@ spec:
           # TCP connect, not an HTTPS GET: busybox wget cannot speak TLS 1.3, which is all dex
           # accepts under internalTls. The Service only lists Ready dex pods, and dex is Ready
           # only once it serves a signing key, so a connect means what /dex/healthz did.
-          until nc -w 3 dex.{{ .Values.namespace }} {{ include "defaulter.dexPort" . }} < /dev/null > /dev/null 2>&1; do
+          # `timeout` bounds each attempt: nc -w only bounds the connect, and an attempt that
+          # never returns would also stall the counter below, defeating the overall timeout.
+          until timeout 5 nc -w 3 dex.{{ .Values.namespace }} {{ include "defaulter.dexPort" . }} < /dev/null > /dev/null 2>&1; do
             echo "Dex service is not yet available, retrying in ${interval}s... (${counter}/${timeout}s)"
             sleep $interval
             counter=$((counter + interval))
