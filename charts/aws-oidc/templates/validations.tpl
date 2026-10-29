@@ -30,6 +30,16 @@
 {{- fail "tls.acm.sslPolicy must not be empty — it sets the NLB listener's TLS security policy" }}
 {{- end }}
 
+{{/* The NLB listener policy is the only TLS setting a consumer can change. Accept only the four
+     AWS post-quantum (PQ) 2025-09 policies limited to TLS 1.2/1.3 and AEAD suites, per AWS's
+     recommendation of ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09 or its FIPS variant. Any other
+     policy is rejected, including non-PQ ones: the other 2025 policies add CBC suites, and some
+     TLS 1.0/1.1. */}}
+{{- $compliantSslPolicies := list "ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09" "ELBSecurityPolicy-TLS13-1-3-PQ-2025-09" "ELBSecurityPolicy-TLS13-1-2-Res-FIPS-PQ-2025-09" "ELBSecurityPolicy-TLS13-1-3-FIPS-PQ-2025-09" }}
+{{- if not (has .Values.tls.acm.sslPolicy $compliantSslPolicies) }}
+{{- fail (printf "tls.acm.sslPolicy %q is not supported — use one of %s" .Values.tls.acm.sslPolicy (join ", " $compliantSslPolicies)) }}
+{{- end }}
+
 {{/* Guard the removed Let's Encrypt keys explicitly. With --reset-then-reuse-values a stored
      value from an older release would otherwise be silently ignored, leaving the operator to
      think TLS is still configured the old way. */}}
@@ -38,15 +48,6 @@
 {{- end }}
 {{- if .Values.tls.mode }}
 {{- fail "tls.mode was removed — ACM is the only supported mode; drop the key and set tls.acm.certificateArn" }}
-{{- end }}
-
-{{/* Validate: reject the two components whose images cannot serve TLS yet. Failing here beats
-     rendering an https:// upstream that every request would then fail to reach. */}}
-{{- if and .Values.internalTls.enabled .Values.internalTls.authmiddleware }}
-{{- fail "internalTls.authmiddleware is not supported yet — the authmiddleware image cannot serve TLS (see jupyter-infra/jupyter-k8s#479)" }}
-{{- end }}
-{{- if and .Values.internalTls.enabled .Values.internalTls.webApp }}
-{{- fail "internalTls.webApp is not supported yet — the jupyter-k8s-ui image cannot serve TLS (see jupyter-infra/jupyter-k8s-ui#71)" }}
 {{- end }}
 
 {{/* Validate: the nodes the NLB targets must be able to run Traefik. targetNodeLabels selects
@@ -94,6 +95,47 @@
 {{- if hasPrefix "tagSpecification" $k }}
 {{- fail (printf "storageClass.ebs.parameters.%s conflicts with storageClass.ebs.additionalResourceTags — set tags in one place only" $k) }}
 {{- end }}
+{{- end }}
+{{- end }}
+
+{{/* Validate: the oauth2-proxy restart CronJob must run at least once inside the window between
+     cert-manager renewing oauth2-proxy-internal-tls and the old leaf expiring
+     (tls.internalCa.renewBefore), or oauth2-proxy serves an expired certificate. The longest
+     gap a cron schedule can leave is bounded conservatively: 1d with day-of-month and
+     day-of-week both unrestricted, 7d with a day-of-week restriction (which day-of-month can
+     only add runs to). Day-of-month-only and month restrictions can leave gaps over 30 days
+     (day 31 skips short months), so they are rejected outright. Only checked when the CronJob
+     renders. */}}
+{{- if and .Values.internalTls.enabled .Values.internalTls.oauth2Proxy }}
+{{- $schedule := .Values.oauth2Proxy.certRestart.schedule | toString | trim }}
+{{- $hint := "use a daily or weekly schedule, e.g. \"0 3 * * *\" or \"0 3 * * 0\"" }}
+{{- $macros := dict "@hourly" 3600 "@daily" 86400 "@midnight" 86400 "@weekly" 604800 }}
+{{- $maxGapSecs := 0 }}
+{{- if hasPrefix "@" $schedule }}
+{{- if not (hasKey $macros $schedule) }}
+{{- fail (printf "oauth2Proxy.certRestart.schedule %q is not supported — %s" $schedule $hint) }}
+{{- end }}
+{{- $maxGapSecs = get $macros $schedule | int }}
+{{- else }}
+{{- $fields := splitList " " $schedule | compact }}
+{{- if ne (len $fields) 5 }}
+{{- fail (printf "oauth2Proxy.certRestart.schedule %q must be a 5-field cron expression — %s" $schedule $hint) }}
+{{- end }}
+{{- $any := list "*" "?" }}
+{{- if not (has (index $fields 3) $any) }}
+{{- fail (printf "oauth2Proxy.certRestart.schedule %q restricts the month field — %s" $schedule $hint) }}
+{{- end }}
+{{- if not (has (index $fields 4) $any) }}
+{{- $maxGapSecs = 604800 }}
+{{- else if has (index $fields 2) $any }}
+{{- $maxGapSecs = 86400 }}
+{{- else }}
+{{- fail (printf "oauth2Proxy.certRestart.schedule %q restricts only the day of month, which can leave gaps over 30 days — %s" $schedule $hint) }}
+{{- end }}
+{{- end }}
+{{- $renewBeforeSecs := include "defaulter.durationToSeconds" .Values.tls.internalCa.renewBefore | int }}
+{{- if ge $maxGapSecs $renewBeforeSecs }}
+{{- fail (printf "oauth2Proxy.certRestart.schedule %q can leave up to %dh between restarts, which must be less than tls.internalCa.renewBefore (%s) so oauth2-proxy picks up a renewed certificate before the old one expires" $schedule (div $maxGapSecs 3600) .Values.tls.internalCa.renewBefore) }}
 {{- end }}
 {{- end }}
 

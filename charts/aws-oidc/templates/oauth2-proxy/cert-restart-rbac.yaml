@@ -1,0 +1,38 @@
+{{- if and .Values.internalTls.enabled .Values.internalTls.oauth2Proxy }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: oauth2-proxy-cert-restart
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: oauth2-proxy-cert-restart
+    component: security
+---
+# `kubectl rollout restart` patches the pod template's restartedAt annotation, and only on the
+# oauth2-proxy Deployment.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: oauth2-proxy-cert-restart-role
+  namespace: {{ .Values.namespace }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["oauth2-proxy"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: oauth2-proxy-cert-restart-rolebinding
+  namespace: {{ .Values.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: oauth2-proxy-cert-restart-role
+subjects:
+  - kind: ServiceAccount
+    name: oauth2-proxy-cert-restart
+    namespace: {{ .Values.namespace }}
+{{- end }}

@@ -52,13 +52,22 @@ spec:
         image: {{ .Values.webApp.repository }}/{{ .Values.webApp.imageName }}:{{ .Values.webApp.imageTag }}
         imagePullPolicy: {{ .Values.webApp.imagePullPolicy }}
         ports:
-        - containerPort: 8090
-          name: http
+        - containerPort: {{ include "defaulter.webAppPort" . }}
+          name: {{ include "defaulter.webAppPortName" . }}
         env:
         - name: NODE_ENV
           value: "production"
         - name: PORT
-          value: "8090"
+          value: {{ include "defaulter.webAppPort" . | quote }}
+{{- if and .Values.internalTls.enabled .Values.internalTls.webApp }}
+        # The server re-reads these files on a poll and serves a renewed certificate without
+        # a restart. That relies on the kubelet updating the Secret volume, so it must stay a
+        # whole-volume mount: a subPath mount is never updated.
+        - name: TLS_CERT_FILE
+          value: /etc/web-app/tls/tls.crt
+        - name: TLS_KEY_FILE
+          value: /etc/web-app/tls/tls.key
+{{- end }}
         - name: NAMESPACE
           value: {{ .Values.webApp.workspacesDefaultNamespace | quote }}
         - name: STATIC_DIR
@@ -120,10 +129,20 @@ spec:
         {{- end }}
         resources:
           {{- toYaml .Values.webApp.resources | nindent 10 }}
+{{- if and .Values.internalTls.enabled .Values.internalTls.webApp }}
+        volumeMounts:
+        - name: internal-tls
+          mountPath: /etc/web-app/tls
+          readOnly: true
+{{- end }}
         livenessProbe:
           httpGet:
             path: /api/v1/health
-            port: http
+            port: {{ include "defaulter.webAppPortName" . }}
+{{- if and .Values.internalTls.enabled .Values.internalTls.webApp }}
+            # kubelet does not verify the certificate on an HTTPS probe.
+            scheme: HTTPS
+{{- end }}
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 3
@@ -131,7 +150,10 @@ spec:
         readinessProbe:
           httpGet:
             path: /api/v1/health
-            port: http
+            port: {{ include "defaulter.webAppPortName" . }}
+{{- if and .Values.internalTls.enabled .Values.internalTls.webApp }}
+            scheme: HTTPS
+{{- end }}
           initialDelaySeconds: 5
           periodSeconds: 5
           timeoutSeconds: 3
@@ -145,4 +167,10 @@ spec:
             - ALL
       securityContext:
         fsGroup: 1000
+{{- if and .Values.internalTls.enabled .Values.internalTls.webApp }}
+      volumes:
+      - name: internal-tls
+        secret:
+          secretName: web-app-internal-tls
+{{- end }}
 {{- end }}

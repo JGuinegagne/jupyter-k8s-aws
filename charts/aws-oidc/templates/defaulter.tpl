@@ -53,6 +53,22 @@ IntOrString, so a quoted "5554" would be read as a named port, not a number.
 {{- if and .Values.internalTls.enabled .Values.internalTls.oauth2Proxy -}}https{{- else -}}http{{- end -}}
 {{- end -}}
 
+{{- define "defaulter.authmiddlewarePort" -}}
+{{- if and .Values.internalTls.enabled .Values.internalTls.authmiddleware -}}8443{{- else -}}8080{{- end -}}
+{{- end -}}
+
+{{- define "defaulter.authmiddlewareScheme" -}}
+{{- if and .Values.internalTls.enabled .Values.internalTls.authmiddleware -}}https{{- else -}}http{{- end -}}
+{{- end -}}
+
+{{- define "defaulter.webAppPort" -}}
+{{- if and .Values.internalTls.enabled .Values.internalTls.webApp -}}8443{{- else -}}8090{{- end -}}
+{{- end -}}
+
+{{- define "defaulter.webAppPortName" -}}
+{{- if and .Values.internalTls.enabled .Values.internalTls.webApp -}}https{{- else -}}http{{- end -}}
+{{- end -}}
+
 {{/*
 Convert rotation interval to cron schedule.
 Supports common durations: "Xm" (minutes), "Xh" (hours).

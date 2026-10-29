@@ -26,7 +26,7 @@ spec:
         matchLabels:
           kubernetes.io/metadata.name: {{ .Values.namespace }}
     ports:
-    - port: 8080
+    - port: {{ include "defaulter.authmiddlewarePort" . }}
       protocol: TCP
   egress:
   # Allow DNS resolution
@@ -41,8 +41,8 @@ spec:
   - ports:
     - port: 443
       protocol: TCP
-  # Allow the wait-for-dex init gate to reach dex:5556/dex/healthz.
-  # This is plaintext, so scope it to the dex pods in this namespace.
+  # Allow the wait-for-dex init gate to reach the dex Service port (TLS unless
+  # internalTls.dex is off). Scoped to the dex pods in this namespace.
   - to:
     - podSelector:
         matchLabels:

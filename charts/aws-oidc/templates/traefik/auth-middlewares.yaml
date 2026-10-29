@@ -70,7 +70,11 @@ metadata:
     component: auth
 spec:
   forwardAuth:
-    address: "http://authmiddleware.{{ .Values.namespace }}:8080/auth"
+    address: "{{ include "defaulter.authmiddlewareScheme" . }}://authmiddleware.{{ .Values.namespace }}:{{ include "defaulter.authmiddlewarePort" . }}/auth"
+{{- if and .Values.internalTls.enabled .Values.internalTls.authmiddleware }}
+    tls:
+      caSecret: authmiddleware-internal-tls
+{{- end }}
     trustForwardHeader: false
     addAuthCookiesToResponse:
       - "{{ $.Values.authmiddleware.cookieName }}"
@@ -95,7 +99,11 @@ metadata:
     component: auth
 spec:
   forwardAuth:
-    address: "http://authmiddleware.{{ .Values.namespace }}:8080/verify"
+    address: "{{ include "defaulter.authmiddlewareScheme" . }}://authmiddleware.{{ .Values.namespace }}:{{ include "defaulter.authmiddlewarePort" . }}/verify"
+{{- if and .Values.internalTls.enabled .Values.internalTls.authmiddleware }}
+    tls:
+      caSecret: authmiddleware-internal-tls
+{{- end }}
     trustForwardHeader: false
     authRequestHeaders:
       - "Cookie"
@@ -114,7 +122,11 @@ metadata:
     component: auth
 spec:
   forwardAuth:
-    address: "http://authmiddleware.{{ .Values.namespace }}:8080/bearer-auth"
+    address: "{{ include "defaulter.authmiddlewareScheme" . }}://authmiddleware.{{ .Values.namespace }}:{{ include "defaulter.authmiddlewarePort" . }}/bearer-auth"
+{{- if and .Values.internalTls.enabled .Values.internalTls.authmiddleware }}
+    tls:
+      caSecret: authmiddleware-internal-tls
+{{- end }}
     trustForwardHeader: false
     addAuthCookiesToResponse:
       - "{{ $.Values.authmiddleware.cookieName }}"

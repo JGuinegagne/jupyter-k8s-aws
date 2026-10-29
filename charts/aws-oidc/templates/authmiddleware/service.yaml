@@ -13,8 +13,8 @@ spec:
     app: authmiddleware
     component: auth
   ports:
-  - port: 8080
-    targetPort: 8080
+  - port: {{ include "defaulter.authmiddlewarePort" . }}
+    targetPort: {{ include "defaulter.authmiddlewareScheme" . }}
     protocol: TCP
-    name: http
+    name: {{ include "defaulter.authmiddlewareScheme" . }}
 {{- end }}

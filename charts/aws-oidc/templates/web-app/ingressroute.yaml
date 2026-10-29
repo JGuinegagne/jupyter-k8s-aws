@@ -24,8 +24,12 @@ spec:
           namespace: {{ .Values.namespace }}
       services:
         - name: web-app
-          port: 8090
+          port: {{ include "defaulter.webAppPort" . }}
           namespace: {{ .Values.namespace }}
+{{- if and .Values.internalTls.enabled .Values.internalTls.webApp }}
+          scheme: https
+          serversTransport: internal-web-app
+{{- end }}
   tls: {}
 ---
 # Auth path: API requests without session cookie go through OAuth2 Proxy
@@ -55,8 +59,12 @@ spec:
           namespace: {{ .Values.namespace }}
       services:
         - name: web-app
-          port: 8090
+          port: {{ include "defaulter.webAppPort" . }}
           namespace: {{ .Values.namespace }}
+{{- if and .Values.internalTls.enabled .Values.internalTls.webApp }}
+          scheme: https
+          serversTransport: internal-web-app
+{{- end }}
   tls: {}
 ---
 # Static/SPA catch-all: always through OAuth2 Proxy
@@ -86,7 +94,11 @@ spec:
           namespace: {{ .Values.namespace }}
       services:
         - name: web-app
-          port: 8090
+          port: {{ include "defaulter.webAppPort" . }}
           namespace: {{ .Values.namespace }}
+{{- if and .Values.internalTls.enabled .Values.internalTls.webApp }}
+          scheme: https
+          serversTransport: internal-web-app
+{{- end }}
   tls: {}
 {{- end }}
