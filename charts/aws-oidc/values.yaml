@@ -43,16 +43,22 @@ tls:
     # supports neither AES-GCM nor ChaCha20-Poly1305 can no longer connect; current browsers
     # support both.
     #
-    # Only policies limited to TLS 1.2/1.3 with AEAD suites are accepted (the chart refuses
-    # to render otherwise): this one, ELBSecurityPolicy-TLS13-1-3-PQ-2025-09 (TLS 1.3
-    # only), and their FIPS variants ELBSecurityPolicy-TLS13-1-2-Res-FIPS-PQ-2025-09 and
-    # ELBSecurityPolicy-TLS13-1-3-FIPS-PQ-2025-09. Every hop behind the NLB is TLS 1.3 only
-    # (see traefik/tls-option.yaml).
+    # Only the four post-quantum (PQ) 2025-09 policies limited to TLS 1.2/1.3 with AEAD
+    # suites are accepted; the chart refuses to render with any other, non-PQ included:
+    # this one, ELBSecurityPolicy-TLS13-1-3-PQ-2025-09 (TLS 1.3 only), and their FIPS
+    # variants ELBSecurityPolicy-TLS13-1-2-Res-FIPS-PQ-2025-09 and
+    # ELBSecurityPolicy-TLS13-1-3-FIPS-PQ-2025-09. Behind the NLB, Traefik and every
+    # router-namespace component it reaches are TLS 1.3 only (see traefik/tls-option.yaml).
     sslPolicy: ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09
   # Private CA that cert-manager mints in this namespace, used for the Traefik
   # certificate and for every internalTls certificate below. Leaf
   # lifetimes are deliberately long: oauth2-proxy cannot reload a rotated
-  # certificate without a pod restart (authmiddleware and the web app can).
+  # certificate without a pod restart (dex, authmiddleware and the web app can).
+  #
+  # Restart window: cert-manager rewrites oauth2-proxy-internal-tls `renewBefore` (30d)
+  # before the leaf expires, but oauth2-proxy keeps serving the old leaf until restarted.
+  # Run `kubectl -n <namespace> rollout restart deployment/oauth2-proxy` inside that
+  # window, or once the old leaf expires Traefik rejects it and every login fails.
   internalCa:
     caDuration: 87600h # 10y — the CA itself
     caRenewBefore: 8760h

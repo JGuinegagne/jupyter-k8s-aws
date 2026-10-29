@@ -30,8 +30,11 @@
 {{- fail "tls.acm.sslPolicy must not be empty — it sets the NLB listener's TLS security policy" }}
 {{- end }}
 
-{{/* The NLB listener policy is the only TLS setting a consumer can change. Accept only the
-     AWS-managed policies limited to TLS 1.2/1.3 and AEAD suites: the other 2025 policies add CBC suites, and some TLS 1.0/1.1. */}}
+{{/* The NLB listener policy is the only TLS setting a consumer can change. Accept only the four
+     AWS post-quantum (PQ) 2025-09 policies limited to TLS 1.2/1.3 and AEAD suites, per AWS's
+     recommendation of ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09 or its FIPS variant. Any other
+     policy is rejected, including non-PQ ones: the other 2025 policies add CBC suites, and some
+     TLS 1.0/1.1. */}}
 {{- $compliantSslPolicies := list "ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09" "ELBSecurityPolicy-TLS13-1-3-PQ-2025-09" "ELBSecurityPolicy-TLS13-1-2-Res-FIPS-PQ-2025-09" "ELBSecurityPolicy-TLS13-1-3-FIPS-PQ-2025-09" }}
 {{- if not (has .Values.tls.acm.sslPolicy $compliantSslPolicies) }}
 {{- fail (printf "tls.acm.sslPolicy %q is not supported — use one of %s" .Values.tls.acm.sslPolicy (join ", " $compliantSslPolicies)) }}

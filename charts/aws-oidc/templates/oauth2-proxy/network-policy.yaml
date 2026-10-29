@@ -39,8 +39,8 @@ spec:
   - ports:
     - port: 443
       protocol: TCP
-  # Allow the wait-for-dex init gate to reach the dex Service port.
-  # This is plaintext, so scope it to the dex pods in this namespace.
+  # Allow the wait-for-dex init gate to reach the dex Service port (TLS unless
+  # internalTls.dex is off). Scoped to the dex pods in this namespace.
   - to:
     - podSelector:
         matchLabels:
