@@ -1,0 +1,72 @@
+{{- if and .Values.internalTls.enabled .Values.internalTls.oauth2Proxy }}
+{{/*
+oauth2-proxy loads its TLS key pair once at startup and cannot reload it, so a certificate
+cert-manager rotates is only served after a restart. cert-manager renews tls.internalCa.renewBefore
+(30d) before the leaf expires; a weekly rolling restart always lands inside that window, wherever
+it falls. The rollout surges a new pod before removing the old one, so it costs no downtime.
+
+Remove once oauth2-proxy can reload a certificate (oauth2-proxy/oauth2-proxy#2953).
+*/}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: oauth2-proxy-cert-restart
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: oauth2-proxy-cert-restart
+    component: security
+spec:
+  schedule: {{ .Values.oauth2Proxy.certRestart.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app: oauth2-proxy-cert-restart
+            component: security
+        spec:
+          serviceAccountName: oauth2-proxy-cert-restart
+          restartPolicy: OnFailure
+          {{- with .Values.oauth2Proxy.nodeSelector | default .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.oauth2Proxy.tolerations | default .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+            runAsNonRoot: true
+          containers:
+          - name: kubectl
+            image: {{ .Values.oauth2Proxy.certRestart.repository }}/{{ .Values.oauth2Proxy.certRestart.imageName }}:{{ .Values.oauth2Proxy.certRestart.imageTag }}
+            imagePullPolicy: {{ .Values.oauth2Proxy.certRestart.imagePullPolicy }}
+            # Distroless: the entrypoint is kubectl itself. The discovery cache goes to the
+            # emptyDir, since the root filesystem is read-only.
+            args:
+            - rollout
+            - restart
+            - deployment/oauth2-proxy
+            - --namespace={{ .Values.namespace }}
+            - --cache-dir=/tmp/kube-cache
+            resources:
+              {{- toYaml .Values.oauth2Proxy.certRestart.resources | nindent 14 }}
+            securityContext:
+              capabilities:
+                drop:
+                - ALL
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+            volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          volumes:
+          - name: tmp
+            emptyDir: {}
+{{- end }}

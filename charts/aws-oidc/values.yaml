@@ -57,8 +57,8 @@ tls:
   #
   # Restart window: cert-manager rewrites oauth2-proxy-internal-tls `renewBefore` (30d)
   # before the leaf expires, but oauth2-proxy keeps serving the old leaf until restarted.
-  # Run `kubectl -n <namespace> rollout restart deployment/oauth2-proxy` inside that
-  # window, or once the old leaf expires Traefik rejects it and every login fails.
+  # The oauth2Proxy.certRestart CronJob restarts it weekly, inside that window; without
+  # it, once the old leaf expires Traefik rejects it and every login fails.
   internalCa:
     caDuration: 87600h # 10y — the CA itself
     caRenewBefore: 8760h
@@ -350,6 +350,23 @@ oauth2Proxy:
   nodeSelector: {}
   # Tolerations for oauth2-proxy pods (overrides chart-level tolerations)
   tolerations: []
+  # Rolling restart that makes oauth2-proxy serve a certificate cert-manager rotated:
+  # oauth2-proxy cannot reload one. Rendered only when internalTls covers oauth2-proxy.
+  # The schedule must be daily or weekly (or @hourly/@daily/@weekly), and its longest gap
+  # under tls.internalCa.renewBefore; the chart refuses to render otherwise.
+  certRestart:
+    schedule: "0 3 * * 0"
+    repository: registry.k8s.io
+    imageName: kubectl
+    imageTag: v1.37.2
+    imagePullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
   # Cookie secret for OAuth2 Proxy (generate with openssl rand -base64 32 | tr -- '+/' '-_')
   cookieSecret: ""
   # Cookie expiry duration (Go duration string, e.g. "8h", "1h30m")
