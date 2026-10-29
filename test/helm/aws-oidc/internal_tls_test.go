@@ -141,6 +141,8 @@ var _ = Describe("Internal TLS", func() {
 		It("keeps the dex wait gates pointing at the port dex actually serves", func() {
 			// A TCP connect, not an HTTPS GET: busybox wget offers TLS 1.2 at most, so against
 			// dex's TLS 1.3-only listener it never succeeds and every gate runs to its timeout.
+			// Each attempt is bounded by `timeout`: one nc that never returns would otherwise
+			// stall the gate's counter, and with it the overall timeout.
 			for _, args := range [][]string{on, off} {
 				dir := renderInternal(args...)
 				port := "5554"
@@ -149,7 +151,7 @@ var _ = Describe("Internal TLS", func() {
 				}
 				for _, f := range []string{oauth2ProxyDeployFile, authmiddlewareDeployFile} {
 					body := read(dir, f)
-					Expect(body).To(ContainSubstring("until nc -w 3 dex.jupyter-k8s-router "+port+" "), f)
+					Expect(body).To(ContainSubstring("until timeout 5 nc -w 3 dex.jupyter-k8s-router "+port+" "), f)
 					Expect(body).NotTo(ContainSubstring("until wget"), f)
 				}
 			}
