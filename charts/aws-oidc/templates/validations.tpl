@@ -98,6 +98,47 @@
 {{- end }}
 {{- end }}
 
+{{/* Validate: the oauth2-proxy restart CronJob must run at least once inside the window between
+     cert-manager renewing oauth2-proxy-internal-tls and the old leaf expiring
+     (tls.internalCa.renewBefore), or oauth2-proxy serves an expired certificate. The longest
+     gap a cron schedule can leave is bounded conservatively: 1d with day-of-month and
+     day-of-week both unrestricted, 7d with a day-of-week restriction (which day-of-month can
+     only add runs to). Day-of-month-only and month restrictions can leave gaps over 30 days
+     (day 31 skips short months), so they are rejected outright. Only checked when the CronJob
+     renders. */}}
+{{- if and .Values.internalTls.enabled .Values.internalTls.oauth2Proxy }}
+{{- $schedule := .Values.oauth2Proxy.certRestart.schedule | toString | trim }}
+{{- $hint := "use a daily or weekly schedule, e.g. \"0 3 * * *\" or \"0 3 * * 0\"" }}
+{{- $macros := dict "@hourly" 3600 "@daily" 86400 "@midnight" 86400 "@weekly" 604800 }}
+{{- $maxGapSecs := 0 }}
+{{- if hasPrefix "@" $schedule }}
+{{- if not (hasKey $macros $schedule) }}
+{{- fail (printf "oauth2Proxy.certRestart.schedule %q is not supported — %s" $schedule $hint) }}
+{{- end }}
+{{- $maxGapSecs = get $macros $schedule | int }}
+{{- else }}
+{{- $fields := splitList " " $schedule | compact }}
+{{- if ne (len $fields) 5 }}
+{{- fail (printf "oauth2Proxy.certRestart.schedule %q must be a 5-field cron expression — %s" $schedule $hint) }}
+{{- end }}
+{{- $any := list "*" "?" }}
+{{- if not (has (index $fields 3) $any) }}
+{{- fail (printf "oauth2Proxy.certRestart.schedule %q restricts the month field — %s" $schedule $hint) }}
+{{- end }}
+{{- if not (has (index $fields 4) $any) }}
+{{- $maxGapSecs = 604800 }}
+{{- else if has (index $fields 2) $any }}
+{{- $maxGapSecs = 86400 }}
+{{- else }}
+{{- fail (printf "oauth2Proxy.certRestart.schedule %q restricts only the day of month, which can leave gaps over 30 days — %s" $schedule $hint) }}
+{{- end }}
+{{- end }}
+{{- $renewBeforeSecs := include "defaulter.durationToSeconds" .Values.tls.internalCa.renewBefore | int }}
+{{- if ge $maxGapSecs $renewBeforeSecs }}
+{{- fail (printf "oauth2Proxy.certRestart.schedule %q can leave up to %dh between restarts, which must be less than tls.internalCa.renewBefore (%s) so oauth2-proxy picks up a renewed certificate before the old one expires" $schedule (div $maxGapSecs 3600) .Values.tls.internalCa.renewBefore) }}
+{{- end }}
+{{- end }}
+
 {{- if not .Values.github.clientId }}
 {{- fail "github.clientId is required" }}
 {{- end }}
